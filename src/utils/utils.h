@@ -23,6 +23,19 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <jansson.h>
+
+#define CITY_MAX_LEN 64
+#define PRICE_CLASS_LEN 4
+
+typedef struct {
+    char city[CITY_MAX_LEN];
+    char price_class[PRICE_CLASS_LEN];
+} EnergyConfig;
+
+int load_config(const char *filename, EnergyConfig *config);
+
+int save_config(const char *filename, const EnergyConfig *config);
 
 /**
  * @brief URL-encodes a string according to RFC 3986

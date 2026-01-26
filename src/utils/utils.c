@@ -115,3 +115,68 @@ void normalize_string_for_cache(const char* in, char* out, size_t out_size) {
     }
     out[j] = '\0';
 }
+
+int valid_price_class(const char *p) {
+    return !strcmp(p, "SE1") ||
+           !strcmp(p, "SE2") ||
+           !strcmp(p, "SE3") ||
+           !strcmp(p, "SE4");
+}
+
+int load_config(const char *filename, EnergyConfig *config) {
+    json_error_t error;
+    json_t *root = json_load_file(filename, 0, &error);
+
+    if (!root)
+        return -1;
+
+    json_t *city = json_object_get(root, "city");
+    json_t *price = json_object_get(root, "price_class");
+
+    if (!json_is_string(city) || !json_is_string(price)) {
+        json_decref(root);
+        return -2;
+    }
+
+    strncpy(config->city, json_string_value(city), CITY_MAX_LEN - 1);
+    strncpy(config->price_class, json_string_value(price), PRICE_CLASS_LEN - 1);
+
+    config->city[CITY_MAX_LEN - 1] = '\0';
+    config->price_class[PRICE_CLASS_LEN - 1] = '\0';
+
+    json_decref(root);
+    return 0;
+}
+
+int save_config(const char *filename, const EnergyConfig *config) {
+    json_t *root = json_object();
+
+    if (!root)
+        return -1;
+
+    json_object_set_new(root, "city", json_string(config->city));
+    json_object_set_new(root, "price_class", json_string(config->price_class));
+
+    int result = json_dump_file(root, filename, JSON_INDENT(4));
+
+    json_decref(root);
+    return result == 0 ? 0 : -2;
+}
+
+int json_to_query_string(json_t *root, char *out, size_t out_size) {
+    json_t *city = json_object_get(root, "city");
+    json_t *price = json_object_get(root, "price_class");
+
+    if (!json_is_string(city) || !json_is_string(price))
+        return -1;
+
+    snprintf(
+        out,
+        out_size,
+        "city=%s&price_class=%s",
+        json_string_value(city),
+        json_string_value(price)
+    );
+
+    return 0;
+}
