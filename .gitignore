@@ -4,6 +4,7 @@ build/
 *.d
 *.a
 *.so
+.code-workspace
 
 # Executables
 just-weather-client
