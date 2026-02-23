@@ -34,7 +34,7 @@ void client_tcp_destroy(ClientTCP* tcp) {
     free(tcp);
 }
 
-int client_tcp_connect(ClientTCP* tcp, const char* host, int port,
+/* int client_tcp_connect(ClientTCP* tcp, const char* host, int port,
                        int timeout_ms) {
     if (!tcp || !host) {
         return -1;
@@ -113,7 +113,7 @@ int client_tcp_connect(ClientTCP* tcp, const char* host, int port,
 
     tcp->fd = fd;
     return 0;
-}
+} */
 
 int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port) {
     if (!tcp || !host || tcp->fd >= 0) return -1;
@@ -175,7 +175,7 @@ ssize_t client_tcp_send_async(ClientTCP* tcp, const void* data, size_t len) {
 int client_tcp_recv(ClientTCP* tcp, void* buffer, size_t len, int timeout_ms) {
     if (!tcp || tcp->fd < 0) 
         return -1;
-        
+
     ssize_t received = recv(tcp->fd, buffer, len, 0);
 
     if (received < 0) {
