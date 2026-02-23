@@ -68,7 +68,7 @@ int client_tcp_connect(ClientTCP* tcp, const char* host, int port,
         }
 
         int flags = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        // fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
         int connect_result = connect(fd, rp->ai_addr, rp->ai_addrlen);
 
@@ -115,9 +115,8 @@ int client_tcp_connect(ClientTCP* tcp, const char* host, int port,
     return 0;
 }
 
-// In client_tcp.c
 int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port) {
-    if (!tcp || !host) return -1;
+    if (!tcp || !host || tcp->fd >= 0) return -1;
 
     char port_str[16];
     snprintf(port_str, sizeof(port_str), "%d", port);
@@ -125,94 +124,70 @@ int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port) {
     struct addrinfo hints = {0}, *res = NULL;
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+    // hints.ai_protocol = IPPROTO_TCP;
 
     if (getaddrinfo(host, port_str, &hints, &res) != 0) return -1;
 
-    int fd = -1;
-    for (struct addrinfo* rp = res; rp != NULL; rp = rp->ai_next) {
-        fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (fd < 0) continue;
-
-        // Set non-blocking immediately
-        int flags = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-
-        int rc = connect(fd, rp->ai_addr, rp->ai_addrlen);
-        
-        if (rc == 0 || errno == EINPROGRESS) {
-            // Success or pending async connection
-            tcp->fd = fd;
-            freeaddrinfo(res);
-            return (rc == 0) ? 0 : 1; 
-        }
-
-        close(fd);
-        fd = -1;
-    }
-
-    freeaddrinfo(res);
-    return -1; // If we reach here, no address succeeded
-}
-
-int client_tcp_send(ClientTCP* tcp, const void* data, size_t len) {
-    if (!tcp || tcp->fd < 0 || !data) {
+    int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (fd < 0) {
+        freeaddrinfo(res);
         return -1;
     }
 
-    size_t total_sent = 0;
-    while (total_sent < len) {
-        ssize_t sent =
-            send(tcp->fd, (const char*)data + total_sent, len - total_sent, 0);
-        if (sent < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return -1;
-        }
-        total_sent += sent;
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    int rc = connect(fd, res->ai_addr, res->ai_addrlen);
+    freeaddrinfo(res);
+
+    tcp->fd = fd;
+    if (rc == 0) {
+        tcp->state = TCP_STATE_CONNECTED;
+        return 0; 
+    } else if (errno == EINPROGRESS) {
+        tcp->state = TCP_STATE_CONNECTING;
+        return 1; 
     }
 
-    return 0;
+    close(fd);
+    tcp->fd = -1;
+    return -1; 
 }
 
 ssize_t client_tcp_send_async(ClientTCP* tcp, const void* data, size_t len) {
+    if (tcp->fd < 0 || tcp->state != TCP_STATE_CONNECTED) return -1;
     ssize_t sent = send(tcp->fd, data, len, MSG_NOSIGNAL);
+    
     if (sent < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return 0; 
-        return -1;    
+        }
+        return -1;
     }
+
+    if ((size_t)sent < len) {
+        size_t remaining = len - sent;
+    }
+
     return sent;
 }
 
 int client_tcp_recv(ClientTCP* tcp, void* buffer, size_t len, int timeout_ms) {
-    if (!tcp || tcp->fd < 0 || !buffer) {
+    if (!tcp || tcp->fd < 0) 
         return -1;
-    }
-
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(tcp->fd, &read_fds);
-
-    struct timeval tv;
-    tv.tv_sec  = timeout_ms / 1000;
-    tv.tv_usec = (timeout_ms % 1000) * 1000;
-
-    int select_result = select(tcp->fd + 1, &read_fds, NULL, NULL, &tv);
-
-    if (select_result < 0) {
-        return -1;
-    }
-
-    if (select_result == 0) {
-        errno = ETIMEDOUT;
-        return -1;
-    }
-
+        
     ssize_t received = recv(tcp->fd, buffer, len, 0);
+
     if (received < 0) {
-        return -1;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0; 
+        }
+        return -1; 
+    }
+
+    if (recieved == 0) {
+        tcp->state = TCP_STATE_DISCONNECTED;
+        return -1
     }
 
     return (int)received;
