@@ -116,55 +116,43 @@ int client_tcp_connect(ClientTCP* tcp, const char* host, int port,
 }
 
 // In client_tcp.c
-int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port,
-                             int timeout_ms) {
-    if (!tcp || !host) {
-        return -1;
-    }
-
-    if (tcp->fd >= 0) {
-        return -1;
-    }
+int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port) {
+    if (!tcp || !host) return -1;
 
     char port_str[16];
     snprintf(port_str, sizeof(port_str), "%d", port);
 
-    struct addrinfo  hints = {0};
-    struct addrinfo* res   = NULL;
-
-    hints.ai_family   = AF_UNSPEC;
+    struct addrinfo hints = {0}, *res = NULL;
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    int gai_result = getaddrinfo(host, port_str, &hints, &res);
-    if (gai_result != 0) {
-        fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(gai_result));
-        return -1;
-    }
+    if (getaddrinfo(host, port_str, &hints, &res) != 0) return -1;
 
     int fd = -1;
-    for (struct addrinfo* rp = res; rp; rp = rp->ai_next) {
+    for (struct addrinfo* rp = res; rp != NULL; rp = rp->ai_next) {
         fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (fd < 0) {
-            continue;
-        }
+        if (fd < 0) continue;
 
-        // Set to NON-BLOCKING and leave it that way!
+        // Set non-blocking immediately
         int flags = fcntl(fd, F_GETFL, 0);
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
-        int res = connect(fd, rp->ai_addr, rp->ai_addrlen);
-
-        if (res == 0) {
+        int rc = connect(fd, rp->ai_addr, rp->ai_addrlen);
+        
+        if (rc == 0 || errno == EINPROGRESS) {
+            // Success or pending async connection
             tcp->fd = fd;
-            return 0; // Connected immediately
-        } else if (errno == EINPROGRESS) {
-            tcp->fd = fd;
-            return 1; // Still connecting (this is what we want!)
+            freeaddrinfo(res);
+            return (rc == 0) ? 0 : 1; 
         }
 
-        return -1; // Actual error
+        close(fd);
+        fd = -1;
     }
+
+    freeaddrinfo(res);
+    return -1; // If we reach here, no address succeeded
 }
 
 int client_tcp_send(ClientTCP* tcp, const void* data, size_t len) {
@@ -186,6 +174,16 @@ int client_tcp_send(ClientTCP* tcp, const void* data, size_t len) {
     }
 
     return 0;
+}
+
+ssize_t client_tcp_send_async(ClientTCP* tcp, const void* data, size_t len) {
+    ssize_t sent = send(tcp->fd, data, len, MSG_NOSIGNAL);
+    if (sent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0; 
+        return -1;    
+    }
+    return sent;
 }
 
 int client_tcp_recv(ClientTCP* tcp, void* buffer, size_t len, int timeout_ms) {
