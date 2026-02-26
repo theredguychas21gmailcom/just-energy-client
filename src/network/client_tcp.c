@@ -22,7 +22,8 @@ ClientTCP* client_tcp_create() {
     if (!tcp) {
         return NULL;
     }
-    tcp->fd = -1;
+    tcp->fd    = -1;
+    tcp->state = TCP_STATE_DISCONNECTED;
     return tcp;
 }
 
@@ -115,18 +116,21 @@ void client_tcp_destroy(ClientTCP* tcp) {
     return 0;
 } */
 
-int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port) {
-    if (!tcp || !host || tcp->fd >= 0) return -1;
+int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port,
+                             int timeout_ms) {
+    if (!tcp || !host || tcp->fd >= 0)
+        return -1;
 
     char port_str[16];
     snprintf(port_str, sizeof(port_str), "%d", port);
 
     struct addrinfo hints = {0}, *res = NULL;
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family   = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     // hints.ai_protocol = IPPROTO_TCP;
 
-    if (getaddrinfo(host, port_str, &hints, &res) != 0) return -1;
+    if (getaddrinfo(host, port_str, &hints, &res) != 0)
+        return -1;
 
     int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (fd < 0) {
@@ -143,51 +147,52 @@ int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port) {
     tcp->fd = fd;
     if (rc == 0) {
         tcp->state = TCP_STATE_CONNECTED;
-        return 0; 
+        return 0;
     } else if (errno == EINPROGRESS) {
         tcp->state = TCP_STATE_CONNECTING;
-        return 1; 
+        return 1;
     }
 
     close(fd);
     tcp->fd = -1;
-    return -1; 
+    return -1;
 }
 
 ssize_t client_tcp_send_async(ClientTCP* tcp, const void* data, size_t len) {
-    if (tcp->fd < 0 || tcp->state != TCP_STATE_CONNECTED) return -1;
+    if (tcp->fd < 0 || tcp->state != TCP_STATE_CONNECTED)
+        return -1;
     ssize_t sent = send(tcp->fd, data, len, MSG_NOSIGNAL);
-    
+
     if (sent < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0; 
+            return 0;
         }
         return -1;
     }
 
     if ((size_t)sent < len) {
-        size_t remaining = len - sent;
+        
     }
 
     return sent;
 }
 
 int client_tcp_recv(ClientTCP* tcp, void* buffer, size_t len, int timeout_ms) {
-    if (!tcp || tcp->fd < 0) 
+    if (!tcp || tcp->fd < 0)
         return -1;
 
     ssize_t received = recv(tcp->fd, buffer, len, 0);
 
     if (received < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0; 
+            return 0;
         }
-        return -1; 
+        return -1;
     }
 
-    if (recieved == 0) {
+    if (received == 0) {
         tcp->state = TCP_STATE_DISCONNECTED;
-        return -1
+        return -1;
     }
 
     return (int)received;

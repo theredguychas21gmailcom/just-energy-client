@@ -76,7 +76,7 @@ int http_client_get(HttpClient* client, const char* url, char** error) {
         return -1;
     }
 
-    if (client_tcp_connect(client->tcp, hostname, port, client->timeout_ms) !=
+    if (client_tcp_connect_async(client->tcp, hostname, port, client->timeout_ms) !=
         0) {
         if (error) {
             *error = strdup("Connection failed");
@@ -196,7 +196,7 @@ static int send_request(HttpClient* client, const char* host,
         return -1;
     }
 
-    return client_tcp_send(client->tcp, request, len);
+    return client_tcp_send_async(client->tcp, request, len);
 }
 
 static int receive_response(HttpClient* client) {

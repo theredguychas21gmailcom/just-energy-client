@@ -367,4 +367,23 @@ char* string_duplicate(const char* str);
 
 void normalize_string_for_cache(const char* in, char* out, size_t out_size);
 
+/**
+ * @brief Converts a JSON configuration object to a query string
+ *
+ * Extracts the 'city' and 'price_class' fields from a JSON object and
+ * formats them as a URL query string in the form "city=X&price_class=Y".
+ *
+ * @param root The root JSON object containing configuration fields
+ * @param out Buffer to store the resulting query string
+ * @param out_size Size of the output buffer
+ *
+ * @return 0 on success, -1 if required fields are missing or invalid
+ *
+ * @note The output buffer should be large enough to hold the query string.
+ *       For typical city and price_class values, 256 bytes is recommended.
+ *
+ * @see load_config(), save_config()
+ */
+int json_to_query_string(json_t *root, char *out, size_t out_size);
+
 #endif

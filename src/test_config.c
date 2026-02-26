@@ -1,9 +1,11 @@
-#include <stdio.h>
+#include "network/client_tcp.h"
 #include "utils/utils.h"
 
-int main(void) {
+#include <stdio.h>
+
+int test_config_main(void) {
     json_error_t error;
-    json_t *root = json_load_file("config.json", 0, &error);
+    json_t*      root = json_load_file("config.json", 0, &error);
 
     if (!root) {
         printf("Failed to load JSON: %s\n", error.text);

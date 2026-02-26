@@ -17,14 +17,7 @@
  * Users should not directly access the fields of this structure.
  */
 #include <stddef.h>
-
-typedef struct {
-    int fd; /**< Socket file descriptor (-1 when not connected) */
-    char* write_buf;
-    size_t write_len;
-    char* read_buf;
-    size_t read_len;
-} ClientTCP;
+#include <sys/types.h>
 
 typedef enum {
     TCP_STATE_DISCONNECTED,
@@ -32,6 +25,15 @@ typedef enum {
     TCP_STATE_CONNECTED,
     TCP_STATE_ERROR
 } TCPState;
+
+typedef struct {
+    int fd; /**< Socket file descriptor (-1 when not connected) */
+    TCPState state; 
+    char* write_buf;
+    size_t write_len;
+    char* read_buf;
+    size_t read_len;
+} ClientTCP;
 
 /**
  * @brief Creates a new TCP client instance
@@ -153,7 +155,7 @@ int client_tcp_connect_async(ClientTCP* tcp, const char* host, int port,
  * }
  * @endcode
  */
-int client_tcp_send_async(ClientTCP* tcp, const void* data, size_t len);
+ssize_t client_tcp_send_async(ClientTCP* tcp, const void* data, size_t len);
 
 /**
  * @brief Receives data from the TCP connection with timeout
